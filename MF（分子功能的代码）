@@ -2,7 +2,7 @@ rm(list = ls())
 options(stringsAsFactors = F)
 
 library(ggplot2)
-data=read.csv("C:/Users/51558/Desktop/re_GO_analysis/01_BP_chart.csv")
+data=read.csv("C:/Users/51558/Desktop/re_GO_analysis/03_MF_chart.csv")
 data$GeneRatio <- data$Count / data$List.Total
 data <- data[order(-data$PValue),]
 data$pathway <- factor(data$Term,levels=data$Term)
