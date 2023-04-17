@@ -1,0 +1,56 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 读取数据
+data = pd.read_csv('data.csv')
+
+# 提取关键基因的数据
+gene1_data = data['gene1']
+gene2_data = data['gene2']
+gene3_data = data['gene3']
+gene4_data = data['gene4']
+
+# 将数据存储在列表中
+data = [gene1_data, gene2_data, gene3_data, gene4_data]
+
+# 画箱线图
+plt.boxplot(data)
+plt.xticks([1, 2, 3, 4], ['gene1', 'gene2', 'gene3', 'gene4'])
+plt.ylabel('Expression level')
+plt.title('Boxplot of Key Genes')
+plt.show()
+
+
+import pandas as pd
+import numpy as np
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+# 读取数据
+data = pd.read_csv('data.csv')
+
+# 提取关键基因的数据和类别标签
+gene1_data = data['gene1']
+gene2_data = data['gene2']
+gene3_data = data['gene3']
+gene4_data = data['gene4']
+labels = data['label']
+
+# 将数据存储在数组中
+X = np.array([gene1_data, gene2_data, gene3_data, gene4_data]).T
+y = np.array(labels)
+
+# 计算ROC曲线和AUC
+fpr, tpr, thresholds = roc_curve(y, X[:, 0])
+roc_auc = auc(fpr, tpr)
+
+# 画ROC曲线
+plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (AUC = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.legend(loc="lower right")
+plt.show()
