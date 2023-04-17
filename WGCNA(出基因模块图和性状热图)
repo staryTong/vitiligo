@@ -1,0 +1,254 @@
+library(WGCNA)
+options(stringsAsFactors = FALSE)
+enableWGCNAThreads()
+
+setwd("C:\\Users\\51558\\Desktop\\re_GO_analysis\\002doWGCNA")
+#加载数据矩阵
+#WGCNA.fpkm = read.table("GSE75819.txt",header = T,comment.char ="",sep = "\t",check.names = F)
+
+WGCNA.fpkm<-read.table("GSE75819.txt",header = T,comment.char = "#",sep = "\t",fill=TRUE,na.strings = "",quote="")
+# 数据矩阵格式
+WGCNA.fpkm[1:10,1:10]
+
+# 查看数据名称
+names(WGCNA.fpkm)
+
+#对数据进行提取
+datExpr0 = as.data.frame(t(WGCNA.fpkm[,-1]))
+names(datExpr0) = WGCNA.fpkm$geneNames;
+rownames(datExpr0) = names(WGCNA.fpkm[,-1])
+
+# 查找缺失值
+gsg = goodSamplesGenes(datExpr0 ,verbose = 3)
+gsg$allOK
+
+# meanFPKM= 0.5
+meanFPKM= 0.8  ####--过滤标准，可以修改 
+n=nrow(datExpr0) 
+datExpr0[n+1,]=apply(datExpr0[c(1:nrow(datExpr0)),],2,mean) 
+datExpr0=datExpr0[1:n,datExpr0[n+1,] > meanFPKM] 
+# for meanFpkm in row n+1 and it must be above what you set--select meanFpkm>opt$meanFpkm(by rp) 
+filtered_fpkm=t(datExpr0) 
+filtered_fpkm=data.frame(rownames(filtered_fpkm),filtered_fpkm) 
+names(filtered_fpkm)[1]="geneNames" 
+head(filtered_fpkm) 
+write.table(filtered_fpkm, file="mRNA.symbol.uniq.filter.txt", 
+            row.names=F, col.names=T,quote=FALSE,sep="\t")
+# 2.3 对input data进行聚类
+#############Sample cluster########### 
+sampleTree = hclust(dist(datExpr0), method = "average") 
+pdf(file = "1.sampleClustering.pdf", width = 15, height = 8) 
+par(cex = 0.6) 
+par(mar = c(0,6,6,0)) 
+plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 2, 
+     cex.axis = 1.5, cex.main = 2) 
+### Plot a line to show the cut 
+#abline(h = 180, col = "red")##剪切高度不确定，故无红线 
+dev.off()
+
+#2.4 加载性状数据
+
+
+allTraits = read.table("new_sample_2.txt",row.names=1,header=T,comment.char = "",check.names=F) 
+dim(allTraits) 
+names(allTraits) 
+head(allTraits)
+#表达量与性状数据进行匹配
+
+fpkmSamples = rownames(datExpr0) 
+traitSamples =rownames(allTraits) 
+traitRows = match(fpkmSamples, traitSamples) 
+datTraits = allTraits[traitRows,] 
+rownames(datTraits) 
+collectGarbage()
+
+pdf(file="2.Sample_dendrogram_and_trait_heatmap.pdf",width=20,height=12) 
+
+#
+sampleTree2 = hclust(dist(datExpr0), method = "average")
+traitColors = numbers2colors(datTraits, signed = FALSE);
+#
+
+plotDendroAndColors(sampleTree2, traitColors, 
+                    groupLabels = names(datTraits), 
+                    main = "Sample dendrogram and trait heatmap",cex.colorLabels = 1.5, cex.dendroLabels = 1, cex.rowText = 2) 
+dev.off() 
+
+
+# 2.5 选择最优的sftpower值
+# 选择最优的sftpower值 
+#softPower = sft$powerEstimate 
+# NA 
+
+powers = c(c(1:10), seq(from = 12, to=20, by=2))
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr0, powerVector = powers, verbose = 5)
+#设置网络构建参数选择范围，计算无尺度分布拓扑矩阵
+
+# Plot the results:
+##sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+     main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+     labels=powers,cex=cex1,col="red");
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.90,col="red")
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+     main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+
+
+
+
+
+
+#2.6 网络构建
+########################
+net = blockwiseModules(
+  datExpr0,
+  power = 6,
+  maxBlockSize = 6000,
+  TOMType = "unsigned", minModuleSize = 30,
+  reassignThreshold = 0, mergeCutHeight = 0.25,
+  numericLabels = TRUE, pamRespectsDendro = FALSE,
+  saveTOMs = F, 
+  verbose = 3
+)
+table(net$colors) 
+
+
+# Convert labels to colors for plotting
+mergedColors = labels2colors(net$colors)
+table(mergedColors)
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net$dendrograms[[1]], mergedColors[net$blockGenes[[1]]],
+                    "Module colors",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+## assign all of the gene to their corresponding module 
+## hclust for the genes.
+
+
+
+
+
+
+#明确样本数和基因数
+nGenes = ncol(datExpr0)
+nSamples = nrow(datExpr0)
+#首先针对样本做个系统聚类树
+datExpr_tree<-hclust(dist(datExpr0), method = "average")
+par(mar = c(0,5,2,0))
+plot(datExpr_tree, main = "Sample clustering", sub="", xlab="", cex.lab = 2, 
+     cex.axis = 1, cex.main = 1,cex.lab=1)
+
+
+
+## 如果这个时候样本是有性状，或者临床表型的，可以加进去看看是否聚类合理
+#针对前面构造的样品矩阵添加对应颜色
+sample_colors <- numbers2colors(as.numeric(factor(datTraits$accession)), 
+                                colors = c("white","blue","red","green"),signed = FALSE)
+## 这个给样品添加对应颜色的代码需要自行修改以适应自己的数据分析项目。
+#  sample_colors <- numbers2colors( datTraits ,signed = FALSE)
+## 如果样品有多种分类情况，而且 datTraits 里面都是分类信息，那么可以直接用上面代码，当然，这样给的颜色不明显，意义不大。
+#构造10个样品的系统聚类树及性状热图
+par(mar = c(1,4,3,1),cex=0.8)
+plotDendroAndColors(datExpr_tree, sample_colors,
+                    groupLabels = colnames(sample),
+                    cex.dendroLabels = 0.8,
+                    marAll = c(1, 4, 3, 1),
+                    cex.rowText = 0.01,
+                    main = "Sample dendrogram and trait heatmap")
+
+
+
+
+#明确样本数和基因数
+nGenes = ncol(datExpr0)
+nSamples = nrow(datExpr0)
+#首先针对样本做个系统聚类树
+datExpr_tree<-hclust(dist(datExpr0), method = "average")
+par(mar = c(0,5,2,0))
+plot(datExpr_tree, main = "Sample clustering", sub="", xlab="", cex.lab = 2, 
+     cex.axis = 1, cex.main = 1,cex.lab=1)
+## 如果这个时候样本是有性状，或者临床表型的，可以加进去看看是否聚类合理
+#针对前面构造的样品矩阵添加对应颜色
+datTraits
+datTraits=apply(datTraits,2,as.numeric)#将test矩阵，逐列转为数值型变量，并再次赋值给test
+#将test矩阵，逐列转为数值型变量，并再次赋值给test
+
+sample_colors <- numbers2colors(datTraits, 
+                                colors = c("white","blue","red","green"),signed = FALSE)
+## 这个给样品添加对应颜色的代码需要自行修改以适应自己的数据分析项目。
+#  sample_colors <- numbers2colors( datTraits ,signed = FALSE)
+## 如果样品有多种分类情况，而且 datTraits 里面都是分类信息，那么可以直接用上面代码，当然，这样给的颜色不明显，意义不大。
+#构造10个样品的系统聚类树及性状热图
+par(mar = c(1,4,3,1),cex=0.8)
+plotDendroAndColors(datExpr_tree, sample_colors,
+                    groupLabels = colnames(sample),
+                    cex.dendroLabels = 0.8,
+                    marAll = c(1, 4, 3, 1),
+                    cex.rowText = 0.01,
+                    main = "Sample dendrogram and trait heatmap")
+
+
+
+
+## step 5 (最重要的) 模块和性状的关系
+## 这一步主要是针对于连续变量，如果是分类变量，需要转换成连续变量方可使用
+table(datTraits$subtype)
+if(T){
+  nGenes = ncol(datExpr0)
+  nSamples = nrow(datExpr0)
+  design=model.matrix(~0+ datTraits)
+  colnames(design)=levels(datTraits)
+  moduleColors <- labels2colors(net$colors)
+  # Recalculate MEs with color labels
+  MEs0 = moduleEigengenes(datExpr0, moduleColors)$eigengenes
+  MEs = orderMEs(MEs0); ##不同颜色的模块的ME值矩 (样本vs模块)
+  moduleTraitCor = cor(MEs, design , use = "p");
+  moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples)
+  
+  sizeGrWindow(10,6)
+  # Will display correlations and their p-values
+  textMatrix = paste(signif(moduleTraitCor, 2), "\n(",
+                     signif(moduleTraitPvalue, 1), ")", sep = "");
+  dim(textMatrix) = dim(moduleTraitCor)
+  png("step5-Module-trait-relationships.png",width = 800,height = 1200,res = 120)
+  par(mar = c(6, 8.5, 3, 3));
+  # Display the correlation values within a heatmap plot
+  labeledHeatmap(Matrix = moduleTraitCor,
+                 xLabels = colnames(design),
+                 yLabels = names(MEs),
+                 ySymbols = names(MEs),
+                 colorLabels = FALSE,
+                 colors = greenWhiteRed(50),
+                 textMatrix = textMatrix,
+                 setStdMargins = FALSE,
+                 cex.text = 0.5,
+                 zlim = c(-1,1),
+                 main = paste("Module-trait relationships"))
+  dev.off()
+  
+  # 除了上面的热图展现形状与基因模块的相关性外
+  # 还可以是条形图,但是只能是指定某个形状
+  # 或者自己循环一下批量出图。
+  Luminal = as.data.frame(design[,3]);
+  names(Luminal) = "Luminal"
+  y=Luminal
+  GS1=as.numeric(cor(y,datExpr0, use="p"))
+  GeneSignificance=abs(GS1)
+  # Next module significance is defined as average gene significance.
+  ModuleSignificance=tapply(GeneSignificance,
+                            moduleColors, mean, na.rm=T)
+  sizeGrWindow(8,7)
+  par(mfrow = c(1,1))
+  # 如果模块太多，下面的展示就不友好
+  # 不过，我们可以自定义出图。
+  plotModuleSignificance(GeneSignificance,moduleColors)
