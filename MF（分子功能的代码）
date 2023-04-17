@@ -1,0 +1,18 @@
+rm(list = ls())
+options(stringsAsFactors = F)
+
+library(ggplot2)
+data=read.csv("C:/Users/51558/Desktop/re_GO_analysis/01_BP_chart.csv")
+data$GeneRatio <- data$Count / data$List.Total
+data <- data[order(-data$PValue),]
+data$pathway <- factor(data$Term,levels=data$Term)
+
+#画图
+p = ggplot(data,aes(GeneRatio,pathway))
+p=p + geom_point()+theme(axis.text.x = element_text(colour="black",size=1))  
+p=p + geom_point(aes(size=Count))
+pbubble = p+ geom_point(aes(color=PValue,size=Count))
+pr = pbubble+scale_color_gradient(low="red",high = "green")
+pr = pr+labs(color=expression(PValue),size="Count",  
+             x="GeneRatio",y="")
+pr + theme_bw()
